@@ -24,9 +24,8 @@ namespace SharpFuck
         }
 
         private AssemblyBuilder _asm;
-        private Type _type;
         private MethodInfo _method;
-        private Stack<int> _stack = new Stack<int>();
+        private Type _type;
 
         private static readonly byte[] _validTokens = new[]
         {
@@ -109,7 +108,7 @@ namespace SharpFuck
 
             gen.DeclareLocal(typeof(int)); // 0
             gen.DeclareLocal(typeof(byte[])); // 1
-            var key_field = gen.DeclareLocal(typeof(ConsoleKeyInfo)); // 2
+            gen.DeclareLocal(typeof(ConsoleKeyInfo)); // 2
 
             // init the ptr field to 0
             gen.Emit(OpCodes.Ldc_I4_0);
@@ -145,7 +144,7 @@ namespace SharpFuck
                                     if (!SkipIO) CompilePutCharToken(gen);
                                     break;
                                 case (byte)',':
-                                    if (!SkipIO) CompileGetCharToken(gen, key_field);
+                                    if (!SkipIO) CompileGetCharToken(gen);
                                     break;
                                 case (byte)'[':
                                     CompileLoopStartToken(labels, gen);
@@ -269,13 +268,13 @@ namespace SharpFuck
         /// <summary>
         /// Compiles a , token
         /// </summary>
-        private void CompileGetCharToken(ILGenerator gen, LocalBuilder key_field)
+        private void CompileGetCharToken(ILGenerator gen)
         {
             gen.Emit(OpCodes.Ldloc_1);
             gen.Emit(OpCodes.Ldloc_0);
             gen.Emit(OpCodes.Call, _readKeyMethod);
             gen.Emit(OpCodes.Stloc_2);
-            gen.Emit(OpCodes.Ldloca, key_field);
+            gen.Emit(OpCodes.Ldloca, 2);
             gen.Emit(OpCodes.Call, _getKeyCodeMethod);
             gen.Emit(OpCodes.Conv_U1);
             gen.Emit(OpCodes.Stelem_I1);
