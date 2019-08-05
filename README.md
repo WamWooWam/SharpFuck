@@ -24,8 +24,6 @@ SharpFuck is a compiler that takes (pretty much) any BrainFuck program and compi
         Specifies the resulting assembly name. Defaults to "BF2IL".
     --type=<name>
         Specifies the resulting type name. Can contain namespaces. Defaults to "BF2IL".
-    --method=<name>
-        Specifies the resulting method name. Defaults to "Execute".
 ```
 
 # Getting Started

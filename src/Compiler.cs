@@ -23,9 +23,11 @@ namespace SharpFuck
             public Label condition;
         }
 
-        private AssemblyBuilder _asm;
+        private AssemblyBuilder _assemblyBuilder;
+        private ModuleBuilder _moduleBuilder;
         private MethodInfo _method;
         private Type _type;
+        private TypeBuilder _typeBuilder;
 
         private static readonly byte[] _validTokens = new[]
         {
@@ -39,11 +41,11 @@ namespace SharpFuck
             (byte)']'
         };
 
-        private static readonly MethodInfo _writeConsoleMethod 
+        private static readonly MethodInfo _writeConsoleMethod
             = typeof(Console).GetMethod("Write", new[] { typeof(char) });
-        private static readonly MethodInfo _readKeyMethod 
+        private static readonly MethodInfo _readKeyMethod
             = typeof(Console).GetMethod("ReadKey", Type.EmptyTypes);
-        private static readonly MethodInfo _getKeyCodeMethod 
+        private static readonly MethodInfo _getKeyCodeMethod
             = typeof(ConsoleKeyInfo).GetProperty("KeyChar").GetMethod;
 
         public Compiler()
@@ -94,18 +96,79 @@ namespace SharpFuck
         /// <summary>
         /// Compiles a list of <see cref="Token"/>s to IL.
         /// </summary>
-        /// <param name="tokens"></param>
         public void CompileTokens(IReadOnlyList<Token> tokens)
         {
-            var labels = new Stack<Loop>();
-            _asm = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(AssemblyName), AssemblyBuilderAccess.RunAndSave);
-
-            var mod = _asm.DefineDynamicModule(AssemblyName, OutputFileName ?? AssemblyName + ".exe");
-            
-            var type = mod.DefineType(TypeName, TypeAttributes.Public);
+            var type = CreateTypeBuilder();
             var method = type.DefineMethod(MethodName, MethodAttributes.Public | MethodAttributes.Static);
-            var gen = method.GetILGenerator();
 
+            CompileTokens(tokens, method);
+
+            _type = type.CreateType();
+            _method = _typeBuilder.GetMethod(MethodName);
+        }
+
+        /// <summary>
+        /// Compiles a list of <see cref="Token"/>s into a specific <see cref="MethodBuilder"/>.
+        /// </summary>
+        public void CompileTokens(IReadOnlyList<Token> tokens, MethodBuilder builder)
+        {
+            var gen = builder.GetILGenerator();
+            EmitTokenList(tokens, gen);
+        }
+
+        /// <summary>
+        /// Creates a type builder which you can populate with your own methods through 
+        /// <see cref="CompileTokens(IReadOnlyList{Token}, MethodBuilder)"/>
+        /// </summary>
+        public TypeBuilder CreateTypeBuilder()
+        {
+            _assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(AssemblyName), AssemblyBuilderAccess.RunAndSave);
+            _moduleBuilder = _assemblyBuilder.DefineDynamicModule(AssemblyName, OutputFileName ?? AssemblyName + ".exe");
+            _typeBuilder = _moduleBuilder.DefineType(TypeName, TypeAttributes.Public);
+
+            return _typeBuilder;
+        }
+
+        /// <summary>
+        /// Executes the compiled output from <see cref="CompileTokens(IReadOnlyList{Token})"/>
+        /// </summary>
+        public void Execute()
+        {
+            if (_assemblyBuilder == null)
+                throw new InvalidOperationException("Nothing has been compiled yet!");
+
+            _method.Invoke(null, null);
+        }
+
+        /// <summary>
+        /// Saves the compiled output from <see cref="CompileTokens(IReadOnlyList{Token})"/> to disk as a class library.
+        /// </summary>
+        public void SaveAsClassLibrary()
+        {
+            if (_assemblyBuilder == null)
+                throw new InvalidOperationException("Nothing has been compiled yet!");
+
+            _assemblyBuilder.Save(OutputFileName);
+        }
+
+        /// <summary>
+        /// Saves the compiled output from <see cref="CompileTokens(IReadOnlyList{Token})"/> to disk as an executable.
+        /// </summary>
+        public void SaveAsExecutable(MethodInfo entryPoint = null)
+        {
+            if (_assemblyBuilder == null)
+                throw new InvalidOperationException("Nothing has been compiled yet!");
+
+            _assemblyBuilder.SetEntryPoint(entryPoint ?? _method);
+            _assemblyBuilder.Save(OutputFileName);
+        }
+
+        /// <summary>
+        /// Emits a list of tokens into an <see cref="ILGenerator"/>
+        /// </summary>
+        private void EmitTokenList(IReadOnlyList<Token> tokens, ILGenerator gen)
+        {
+            var labels = new Stack<Loop>();
             gen.DeclareLocal(typeof(int)); // 0
             gen.DeclareLocal(typeof(byte[])); // 1
             gen.DeclareLocal(typeof(ConsoleKeyInfo)); // 2
@@ -161,43 +224,6 @@ namespace SharpFuck
             }
 
             gen.Emit(OpCodes.Ret);
-
-            _type = type.CreateType();
-            _method = _type.GetMethod(MethodName);
-        }
-
-        /// <summary>
-        /// Executes the compiled output from <see cref="CompileTokens(IReadOnlyList{Token})"/>
-        /// </summary>
-        public void Execute()
-        {
-            if (_asm == null)
-                throw new InvalidOperationException("Nothing has been compiled yet!");
-
-            _method.Invoke(null, null);
-        }
-
-        /// <summary>
-        /// Saves the compiled output from <see cref="CompileTokens(IReadOnlyList{Token})"/> to disk as a class library.
-        /// </summary>
-        public void SaveAsClassLibrary()
-        {
-            if (_asm == null)
-                throw new InvalidOperationException("Nothing has been compiled yet!");
-
-            _asm.Save(OutputFileName);
-        }
-
-        /// <summary>
-        /// Saves the compiled output from <see cref="CompileTokens(IReadOnlyList{Token})"/> to disk as an executable.
-        /// </summary>
-        public void SaveAsExecutable()
-        {
-            if (_asm == null)
-                throw new InvalidOperationException("Nothing has been compiled yet!");
-
-            _asm.SetEntryPoint(_method);
-            _asm.Save(OutputFileName);
         }
 
         /// <summary>
@@ -261,7 +287,7 @@ namespace SharpFuck
         {
             gen.Emit(OpCodes.Ldloc_1);
             gen.Emit(OpCodes.Ldloc_0);
-            gen.Emit(OpCodes.Ldelem_U1);            
+            gen.Emit(OpCodes.Ldelem_U1);
             gen.Emit(OpCodes.Call, _writeConsoleMethod);
         }
 
